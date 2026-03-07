@@ -2,6 +2,18 @@ import express from "express";
 import cors from "cors";
 import { Server } from "socket.io";
 import http from "http";
+import dotenv from "dotenv";
+import dns from "dns";
+import userRoute from "./routes/user.route.js";
+import connectDB from "./db.js";
+import Message from "./models/message.models.js";
+import messageRoute from "./routes/message.route.js";
+
+dns.setServers(["1.1.1.1", "8.8.8.8"]);
+
+dotenv.config();
+const PORT = process.env.PORT || 3000;
+connectDB();
 
 const app = express();
 const server = http.createServer(app);
@@ -23,8 +35,17 @@ io.on("connection", (socket) => {
     console.log(`User Id :- ${socket.id} joined room :- ${data}`);
   });
 
-  socket.on("send_message", (data) => {
+  socket.on("send_message", async (data) => {
     console.log("Send message data", data);
+
+    const newMessage = new Message({
+      room: data.room,
+      author: data.author,
+      message: data.message,
+      time: data.time,
+    });
+
+    await newMessage.save();
     socket.to(data.room).emit("receive_message", data);
   });
 
@@ -42,5 +63,8 @@ io.on("connection", (socket) => {
 });
 
 app.use(cors());
+app.use(express.json());
+app.use("/user", userRoute);
+app.use("/messages", messageRoute);
 
-server.listen(3000, () => console.log("Server is running on port 3000"));
+server.listen(PORT, () => console.log(`Server is running on port ${PORT}`));

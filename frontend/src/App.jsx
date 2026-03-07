@@ -1,47 +1,75 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import io from "socket.io-client";
+import Signup from "./components/Signup";
+import Login from "./components/Login";
+import JoinRoom from "./components/JoinRoom";
 import { Chat } from "./Chat";
-import loginMusic from "./audio/login.wav";
 
 const socket = io.connect("http://localhost:3000");
 
-const App = () => {
-  const [userName, setuserName] = useState("");
-  const [room, setRoom] = useState("");
-  const [showChat, setShowChat] = useState(false);
+function App() {
+  const [authMode, setAuthMode] = useState("login");
+  const [user, setUser] = useState(null);
+  const [room, setRoom] = useState(localStorage.getItem("room") || "");
+  const [loading, setLoading] = useState(true);
 
-  const music = new Audio(loginMusic);
+  useEffect(() => {
+    const verifyUser = async () => {
+      const savedUser = JSON.parse(localStorage.getItem("user"));
+      if (!savedUser) {
+        setLoading(false);
+        return;
+      }
 
-  const joinChat = () => {
-    if (userName !== "" && room !== "") {
-      socket.emit("join_room", room);
-      setShowChat(true);
-      music.play();
-    }
-  };
+      try {
+        const res = await fetch(`http://localhost:3000/user/${savedUser._id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+          setRoom(localStorage.getItem("room") || "");
+        } else {
+          localStorage.removeItem("user");
+          localStorage.removeItem("room");
+          setUser(null);
+        }
+      } catch (err) {
+        console.log("User verification failed:", err);
+        localStorage.removeItem("user");
+        localStorage.removeItem("room");
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    verifyUser();
+  }, []);
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!user) {
+    return authMode === "login" ? (
+      <Login setUser={setUser} setAuthMode={setAuthMode} />
+    ) : (
+      <Signup setUser={setUser} setAuthMode={setAuthMode} />
+    );
+  }
+  if (!room) {
+    return <JoinRoom socket={socket} user={user} setRoom={setRoom} />;
+  }
 
   return (
-    <>
-      {!showChat && (
-        <div className="joinRoom">
-          <h1>Chat App</h1>
-          <input
-            type="text"
-            placeholder="Enter name"
-            onChange={(e) => setuserName(e.target.value)}
-          />
-          <input
-            type="text"
-            placeholder="Enter chat room no."
-            onChange={(e) => setRoom(e.target.value)}
-          />
-          <button onClick={joinChat}>Join Chat</button>
-        </div>
-      )}
-
-      {showChat && <Chat socket={socket} userName={userName} room={room} />}
-    </>
+    <Chat
+      socket={socket}
+      userName={user.name}
+      room={room}
+      setUser={setUser}
+      setRoom={setRoom}
+      setAuthMode={setAuthMode}
+    />
   );
-};
+}
 
 export default App;
